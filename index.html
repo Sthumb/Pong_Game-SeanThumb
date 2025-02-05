@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pong Game with Computer Paddle</title>
+  <style>
+    canvas {
+      background-color: black;
+      display: block;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="pong" width="800" height="400"></canvas>
+  <script>
+    const canvas = document.getElementById("pong");
+    const ctx = canvas.getContext("2d");
+
+    // Paddle settings
+    const paddleWidth = 10;
+    const paddleHeight = 100;
+    let playerY = (canvas.height - paddleHeight) / 2;
+    let computerY = (canvas.height - paddleHeight) / 2;
+    const paddleSpeed = 5;
+
+    // Ball settings
+    const ballSize = 10;
+    let ballX = canvas.width / 2;
+    let ballY = canvas.height / 2;
+    let ballSpeedX = 5;
+    let ballSpeedY = 5;
+
+    // Score
+    let playerScore = 0;
+    let computerScore = 0;
+
+    // Computer AI
+    function computerAI() {
+      const middleOfPaddle = computerY + paddleHeight / 2;
+      if (middleOfPaddle < ballY - 30) {
+        computerY += paddleSpeed;
+      } else if (middleOfPaddle > ballY + 30) {
+        computerY -= paddleSpeed;
+      }
+    }
+
+    // Webcam stream and hand gesture recognition
+    const constraints = {
+      video: true
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(function (stream) {
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.onloadedmetadata = function (e) {
+          video.play();
+          detectHandGesture(video);
+        };
+      })
+      .catch(function (error) {
+        console.error('Error accessing webcam:', error);
+      });
+
+    // Function to detect hand gesture
+    function detectHandGesture(video) {
+      const handTrack = new HandTracker({ locateFile: (file) => `/models/${file}` });
+      handTrack.load().then(model => {
+        handTrack.startVideo(video);
+        runDetection(model);
+      });
+    }
+
+    // Function to run hand gesture detection
+    function runDetection(model) {
+      model.detect().then(predictions => {
+        if (predictions.length > 0) {
+          const hand = predictions[0];
+          const landmarks = hand.landmarks;
+
+          // Get the y-coordinate of the hand's index finger
+          const indexFingerY = landmarks[4][1];
+
+          // Adjust the player's paddle position based on the index finger's y-coordinate
+          playerY = indexFingerY - paddleHeight / 2;
+        }
+
+        // Continue detection
+        runDetection(model);
+      });
+    }
+
+    // Update function
+    function update() {
+      ballX += ballSpeedX;
+      ballY += ballSpeedY;
+
+      // Ball collision with top and bottom walls
+      if (ballY < 0 || ballY > canvas.height) {
+        ballSpeedY = -ballSpeedY;
+      }
+
+      // Ball collision with paddles
+      if (
+        ballX < paddleWidth &&
+        ballY > playerY &&
+        ballY < playerY + paddleHeight
+      ) {
+        ballSpeedX = -ballSpeedX;
+      } else if (ballX > canvas.width - paddleWidth) {
+        if (
+          ballY > computerY &&
+          ballY < computerY + paddleHeight
+        ) {
+          ballSpeedX = -ballSpeedX;
+        } else {
+          // Ball out of bounds (player side)
+          if (ballX < 0) {
+            computerScore++;
+            resetBall();
+          }
+        }
+      }
+
+      // Computer AI
+      computerAI();
+    }
+
+    // Reset ball to the center
+    function resetBall() {
+      ballX = canvas.width / 2;
+      ballY = canvas.height / 2;
+      ballSpeedX = -ballSpeedX;
+    }
+
+    // Draw everything
+    function draw() {
+      // Clear the canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw paddles
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, playerY, paddleWidth, paddleHeight);
+      ctx.fillRect(canvas.width - paddleWidth, computerY, paddleWidth, paddleHeight);
+
+      // Draw the ball
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, ballSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Display scores
+      ctx.fillText(`Player: ${playerScore}`, 100, 50);
+      ctx.fillText(`Computer: ${computerScore}`, canvas.width - 200, 50);
+    }
+
+    // Game loop
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handtrackjs"></script>
+</body>
+</html>
